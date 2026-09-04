@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+llama-cpp-python
+pydantic
+pydantic-settings
+python-dotenv
+pytest
+httpx
