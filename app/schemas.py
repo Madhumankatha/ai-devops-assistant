@@ -15,3 +15,4 @@ class IncidentAnalysis(BaseModel):
     evidence: list[str]
     recommended_actions: list[str]
     confidence: float = Field(ge=0.0, le=1.0)
+    processing_time_ms: float

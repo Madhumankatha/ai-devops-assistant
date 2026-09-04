@@ -1,7 +1,7 @@
 from llama_cpp import Llama
 
 
-MODEL_PATH = r"C:\\Users\\Mahendra\\.cache\\huggingface\\hub\\models--unsloth--Qwen3.5-2B-GGUF\\snapshots\\f6d5376be1edb4d416d56da11e5397a961aca8ae\\qwen3.5-2b-ud-q4_k_xl.gguf"
+MODEL_PATH = r".\\models\\qwen3.5-2b-ud-q4_k_xl.gguf"
 
 
 llm = Llama(

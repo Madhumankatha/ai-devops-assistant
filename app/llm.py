@@ -91,7 +91,17 @@ IMPORTANT RULES:
 1. Do not invent facts.
 2. Do not assume information that is not present.
 3. Clearly distinguish evidence from inference.
-4. Identify the most likely root cause.
+4. Identify the most likely root cause ONLY when supported by
+the provided evidence.
+
+Do not introduce possible causes that are not supported by
+the evidence.
+
+If the evidence is insufficient, explicitly say:
+"Insufficient evidence to determine the root cause."
+
+For every root cause, ensure that at least one item in
+the evidence array directly supports it.
 5. Recommend practical remediation steps.
 6. Severity must be exactly one of:
    LOW, MEDIUM, HIGH, CRITICAL.
@@ -219,6 +229,8 @@ Return only the requested JSON object.
     content = response["choices"][0]["message"]["content"]
 
     data = _extract_json(content)
+
+    data["processing_time_ms"] = round(elapsed * 1000, 2)
 
     result = IncidentAnalysis.model_validate(data)
 
