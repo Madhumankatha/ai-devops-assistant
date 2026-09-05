@@ -7,8 +7,13 @@ from fastapi.responses import JSONResponse
 
 from .core.config import APP_NAME, APP_VERSION, LOG_LEVEL, MODEL_PATH
 from .core.logging import configure_logging
-from .llm import analyze_incident
+from .llm import llm
 from .schemas.incident import IncidentAnalysis, IncidentRequest
+from .agent.controller import DevOpsAgent
+from .schemas.incident import (
+    InvestigationRequest,
+    InvestigationResponse,
+)
 
 configure_logging(LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -19,6 +24,10 @@ app = FastAPI(
     description="Local AI DevOps Assistant powered by Qwen3.5-2B GGUF and llama.cpp.",
 )
 
+devops_agent = DevOpsAgent(
+    llm=llm,
+    max_iterations=5,
+)
 
 @app.middleware("http")
 async def request_context(request: Request, call_next):
@@ -71,4 +80,17 @@ def analyze(request: IncidentRequest):
         environment=request.environment,
         logs=request.logs,
         description=request.description,
+    )
+
+
+@app.post(
+    "/api/v1/investigate",
+    response_model=InvestigationResponse,
+)
+def investigate(request: InvestigationRequest):
+
+    return devops_agent.investigate(
+        service=request.service,
+        namespace=request.namespace,
+        question=request.question,
     )

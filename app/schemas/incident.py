@@ -25,3 +25,29 @@ class IncidentAnalysis(BaseModel):
     recommended_actions: list[str]
     confidence: float = Field(ge=0.0, le=1.0)
     processing_time_ms: float = Field(ge=0.0)
+
+
+class InvestigationRequest(BaseModel):
+    service: str = Field(min_length=1, max_length=200)
+    namespace: str = Field(
+        default="default",
+        min_length=1,
+        max_length=100,
+    )
+    question: str = Field(
+        min_length=1,
+        max_length=2000,
+    )
+
+
+class InvestigationResponse(BaseModel):
+    summary: str
+    root_cause: str
+    evidence: list[str]
+    recommended_actions: list[str]
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
+    tools_used: list[dict]
+    iterations: int
