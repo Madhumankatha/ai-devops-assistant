@@ -1,3 +1,11 @@
-models
-.venv
-__pycache__
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment
+.env
+
+# Local models
+models/*.gguf
