@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: ai-devops-assistant
+Version: 0.2.0
+Summary: Local AI DevOps Assistant powered by Qwen3.5-2B and llama.cpp
+Requires-Python: >=3.13
+License-File: LICENSE
+Dynamic: license-file
