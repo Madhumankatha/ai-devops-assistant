@@ -1,590 +1,285 @@
+# 🤖 AI DevOps Assistant
 
+> A production-oriented, privacy-first AI DevOps assistant powered by a local **Qwen3.5-2B GGUF** model and **llama.cpp**.
 
-Frontend
-────────
-React / Next.js
+The project is being built hands-on from local LLM inference to RAG, agentic workflows, MCP integrations, Kubernetes diagnostics, evaluation, observability, and production deployment.
 
-Backend
-───────
-Python + FastAPI
-or
-Java + Spring Boot
+## 🚧 Project Status
 
-AI
-──
-OpenAI / Anthropic / open-source LLMs
+**Current phase: Phase 1 — Local LLM Incident Analyzer**
 
-Agent
-─────
-LangGraph
+Implemented:
 
-RAG
-───
-PostgreSQL + pgvector
-Qdrant
+- Local Qwen3.5-2B GGUF inference
+- CPU-only llama.cpp inference
+- FastAPI REST API
+- Structured incident-analysis output
+- Pydantic request/response validation
+- Evidence-focused root-cause prompting
+- Request IDs and HTTP timing headers
+- Health and readiness endpoints
+- Application logging
+- Docker container definition
+- Initial automated tests
 
-Retrieval
-─────────
-BM25 + Vector Search
-+ Reranker
+## 🏗️ Current Architecture
 
-MCP
-───
-MCP Servers
+```text
+Client
+  │
+  ▼
+FastAPI
+  │
+  ▼
+Incident Analyzer
+  │
+  ▼
+llama.cpp
+  │
+  ▼
+Qwen3.5-2B GGUF
+  │
+  ▼
+Structured JSON
+  │
+  ▼
+Pydantic Validation
+```
 
-DevOps
-──────
-Kubernetes
-Helm
-Argo CD
-Jenkins
-Prometheus
-Grafana
+## 🧪 Example
 
-Security
-────────
-Vault
-RBAC
-Istio/mTLS
-OPA
+### Request
 
-Observability
-─────────────
-OpenTelemetry
-Prometheus
-Grafana
-
-Evaluation
-──────────
-RAG/Agent evaluation framework
-+ custom evaluation datasets
-
-Portfolio projects
-
-We’ll build these progressively:
-
-LLM Engineering Lab — prompts, structured outputs, function calling
-Enterprise RAG Platform ⭐ — production-grade RAG
-Agentic Knowledge Assistant — LangGraph + tools + memory
-AI DevOps Assistant ⭐⭐⭐ — Kubernetes + Prometheus + Helm + Git + MCP
-AI Evaluation & Observability Platform
-FDE Production Case Study — turn one project into a customer-ready solution
-
-Project: llm-engineering-lab
-
-llm-engineering-lab/
-├── README.md
-├── src/
-│   ├── prompting/
-│   ├── structured_output/
-│   ├── function_calling/
-│   ├── streaming/
-│   └── model_routing/
-├── tests/
-├── examples/
-├── requirements.txt
-└── .env.example
-
-
-Hands-on tasks
-
-Build:
-
-Prompt templates
-Zero-shot prompts
-Few-shot prompts
-Structured JSON output
-Function calling
-Streaming responses
-Retry/fallback
-Token/cost tracking
-Model routing
-Final mini-project
-
-Build:
-
-1 AI Incident Summarizer
-
-Input:
-
-Kubernetes logs
-+
-deployment information
-+
-incident description
-
-Output:
-
+```json
 {
-  "summary": "...",
+  "service": "payment-service",
+  "environment": "production",
+  "description": "Payment pods are repeatedly restarting",
+  "logs": "ERROR database connection timeout after 30 seconds\nERROR failed to connect to database"
+}
+```
+
+### Response
+
+```json
+{
+  "summary": "Payment service pods are experiencing repeated restarts due to database connection timeouts.",
   "severity": "HIGH",
-  "probable_cause": "...",
-  "evidence": [],
-  "recommended_actions": [],
-  "confidence": 0.91
+  "root_cause": "Database connection failures are causing the application to restart.",
+  "evidence": [
+    "Database connection timeout is present in the logs",
+    "Database connection failure is present in the logs"
+  ],
+  "recommended_actions": [
+    "Verify database availability",
+    "Check database connectivity from the workload",
+    "Review database connection configuration"
+  ],
+  "confidence": 0.90,
+  "processing_time_ms": 0.0
 }
+```
 
+## 📁 Project Structure
 
-                         ┌──────────────────┐
-                         │   React / UI     │
-                         └────────┬─────────┘
-                                  │
-                                  ▼
-                         ┌──────────────────┐
-                         │     FastAPI      │
-                         └────────┬─────────┘
-                                  │
-                                  ▼
-                    ┌─────────────────────────┐
-                    │     AI Orchestrator     │
-                    └────────────┬────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              │                  │                  │
-              ▼                  ▼                  ▼
-        Prompt Engine        RAG Engine        Agent Engine
-              │                  │                  │
-              │                  ▼                  ▼
-              │             pgvector/Qdrant     Tools/MCP
-              │                  │                  │
-              └──────────────────┼──────────────────┘
-                                 ▼
-                         ┌──────────────────┐
-                         │ Qwen3.5-2B GGUF  │
-                         │   UD-Q4_K_XL     │
-                         └────────┬─────────┘
-                                  │
-                                  ▼
-                         Structured Response
-
-Recommended local stack
-
-| Layer                 | Technology                           |
-| --------------------- | ------------------------------------ |
-| LLM                   | **Qwen3.5-2B-GGUF UD-Q4_K_XL**       |
-| Inference             | **llama.cpp / llama-cpp-python**     |
-| API                   | FastAPI                              |
-| RAG                   | LlamaIndex or custom Python          |
-| Vector DB             | PostgreSQL + pgvector                |
-| Alternative Vector DB | Qdrant                               |
-| Embeddings            | Dedicated embedding model            |
-| Reranker              | Dedicated reranker model             |
-| Agents                | LangGraph                            |
-| MCP                   | MCP Python SDK                       |
-| Database              | PostgreSQL                           |
-| Cache                 | Redis                                |
-| Observability         | OpenTelemetry + Prometheus + Grafana |
-| Container             | Docker                               |
-| Deployment            | Kubernetes                           |
-| GitOps                | Argo CD                              |
-
-
-2 RAG Fundamentals
-
-enterprise-rag-platform
-
-Documents
-   ↓
-Loader
-   ↓
-Chunker
-   ↓
-Embeddings
-   ↓
-pgvector
-   ↓
-Retriever
-   ↓
-LLM
-   ↓
-Answer
-
-Support:
-
-PDF
-Markdown
-TXT
-DOCX
-HTML
-
-Build a CLI first:
-
-python -m app ingest ./documents
-python -m app query "What is the deployment process?"
-
-Then build an API.
-
-POST /documents
-POST /query
-GET  /documents
-DELETE /documents/{id}
-
-3 Advanced RAG
-
-Now make your RAG system actually production-grade.
-
-Implement:
-
-Retrieval
-
-User Query
-    ↓
-Query preprocessing
-    ↓
- ┌───────────────┐
- │ Vector Search │
- └───────┬───────┘
-         +
- ┌───────────────┐
- │  BM25 Search  │
- └───────┬───────┘
-         ↓
-   Hybrid Ranking
-         ↓
-      Reranker
-         ↓
-   Context Builder
-         ↓
-        LLM
-
-Learn and implement:
-
-Hybrid search
-Metadata filtering
-Reranking
-Query rewriting
-Parent/child chunks
-Context compression
-Citation generation
-
-Important
-
-Your answer should show:
-
-Answer
-
-The deployment requires approval from the platform team...
-
-Sources:
-[1] deployment-process.md
-[2] platform-handbook.pdf
-[3] production-runbook.md
-
-
-Enterprise RAG
-
-                 API Gateway
-                      │
-                      ↓
-               Authentication
-                      │
-                      ↓
-                    RBAC
-                      │
-                      ↓
-               RAG Orchestrator
-                      │
-          ┌───────────┼───────────┐
-          ↓           ↓           ↓
-       Vector       BM25       Metadata
-          │           │           │
-          └───────────┼───────────┘
-                      ↓
-                   Reranker
-                      ↓
-                     LLM
-                      ↓
-             Answer + Citations
-
-
-Add:
-
-JWT authentication
-RBAC
-User/tenant isolation
-Document permissions
-Audit logs
-Rate limiting
-API versioning
-Docker
-PostgreSQL
-pgvector
-Qdrant comparison
-
-GitHub README should contain
-Architecture
-Installation
-Configuration
-API documentation
-Database schema
-RAG pipeline
-Security model
-Evaluation
-Performance
-Screenshots
-Demo video
-Future improvements
-
-
-5 — Agentic AI
-
-Project
-
-agentic-knowledge-assistant
-
-Use LangGraph.
-
-Architecture
-
-                   User
-                    │
-                    ↓
-                  Agent
-                    │
-              ┌─────┴─────┐
-              ↓           ↓
-           Retriever     Tools
-              │           │
-              ↓           ↓
-             RAG       External APIs
-              │           │
-              └─────┬─────┘
-                    ↓
-                  Agent
-                    ↓
-              Final Answer
-
-
-Build tools such as:
-
-search_documents()
-get_document()
-search_web()
-calculate()
-get_system_status()
-
-Then add:
-
-State
-Memory
-Tool calling
-Conditional routing
-Human approval
-Checkpoints
-Error handling
-
-
-6 — ⭐ AI DevOps Assistant
-
-Repository:
-
+```text
 ai-devops-assistant/
+├── app/
+│   ├── core/
+│   │   ├── config.py
+│   │   └── logging.py
+│   ├── schemas/
+│   │   └── incident.py
+│   ├── llm.py
+│   ├── main.py
+│   └── schemas.py
+├── tests/
+│   ├── test_health.py
+│   └── test_schemas.py
+├── models/                 # local GGUF files; not committed
+├── .env.example
+├── .gitignore
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
 
-Architecture
+## ⚙️ Local Setup
 
-                         User
-                           │
-                           ↓
-                    AI DevOps Agent
-                           │
-                       LangGraph
-                           │
-          ┌────────────────┼────────────────┐
-          ↓                ↓                ↓
-     Kubernetes          Git            Prometheus
-        Tool             Tool              Tool
-          │                │                │
-          ↓                ↓                ↓
-       Cluster           Repo            Metrics
-          │                │                │
-          └────────────────┼────────────────┘
-                           ↓
-                     RCA Engine
-                           ↓
-                    Fix Plan Generator
-                           ↓
-                    Human Approval
-                           ↓
-                    Remediation Tool
+### 1. Clone
 
-Example
+```bash
+git clone https://github.com/Madhumankatha/ai-devops-assistant.git
+cd ai-devops-assistant
+```
 
-User:
+### 2. Create a virtual environment
 
-Why is payment-service failing?
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-Agent:
+### 3. Install dependencies
 
-1. Check deployment
-2. Check pods
-3. Inspect logs
-4. Check Kubernetes events
-5. Inspect Helm values
-6. Check Prometheus metrics
-7. Inspect recent Git changes
-8. Correlate evidence
-9. Determine root cause
-10. Generate remediation plan
+For Windows CPU-only development, install a compatible pre-built `llama-cpp-python` wheel when available for your Python version, then install the remaining requirements:
 
-Output:
+```powershell
+python -m pip install -r requirements.txt
+```
 
-╔══════════════════════════════════════╗
-║ INCIDENT RCA                         ║
-╚══════════════════════════════════════╝
+> If pip attempts to compile `llama-cpp-python` and reports missing C/C++ build tools, use a compatible pre-built CPU wheel or install the required native build toolchain.
 
-Service:
-payment-service
+### 4. Add the model
 
-Severity:
-HIGH
+Place your Qwen GGUF file under:
 
-Root Cause:
-Invalid database endpoint.
+```text
+models/
+```
 
-Evidence:
-✓ Pod logs
-✓ Kubernetes events
-✓ Deployment configuration
-✓ Prometheus metrics
-✓ Git commit
+Configure `.env`:
 
-Recommended Fix:
+```text
+MODEL_PATH=./models/your-qwen3.5-2b-model.gguf
+N_CTX=4096
+N_THREADS=8
+N_BATCH=256
+LOG_LEVEL=INFO
+```
 
-1. Update DB_HOST
-2. Deploy configuration
-3. Restart affected pods
+The `.gguf` model is intentionally excluded from GitHub.
 
-Confidence:
-94%
+### 5. Run
 
-Risk:
-MEDIUM
+```powershell
+uvicorn app.main:app --reload
+```
 
-[ APPROVE REMEDIATION ]
+Open Swagger UI:
 
-7 — Evaluation + Observability
+```text
+http://127.0.0.1:8000/docs
+```
 
-Implement:
+Health:
 
-                 AI Application
-                       │
-          ┌────────────┼────────────┐
-          ↓            ↓            ↓
-       Tracing       Metrics       Logs
-          │            │            │
-          └────────────┼────────────┘
-                       ↓
-                 Observability
-                       │
-          ┌────────────┼────────────┐
-          ↓            ↓            ↓
-       Quality        Cost        Latency
-          ↓            ↓            ↓
-                 Evaluation
+```text
+GET /health
+```
 
-Track:
+Readiness:
 
-LLM latency
-Token usage
-Cost
-Retrieval latency
-Retrieval quality
-Answer quality
-Hallucination
-Tool failures
-Agent success rate
+```text
+GET /ready
+```
 
-Create an evaluation dataset:
+Incident analysis:
 
-{
-  "question": "Why is pod X crashing?",
-  "expected_root_cause": "OOMKilled",
-  "expected_tool": "kubernetes_logs",
-  "expected_evidence": ["pod events", "container logs"]
-}
+```text
+POST /api/v1/analyze
+```
 
+### 6. Run tests
 
-8 — FDE
+```powershell
+pytest -q
+```
 
-Now we package everything as if you're delivering it to a real customer.
+## 🗺️ Roadmap
 
-Create:
+### Phase 1 — Local LLM ✅
 
-fde-case-study/
-├── problem.md
-├── customer-workflow.md
-├── requirements.md
-├── architecture.md
-├── security.md
-├── deployment.md
-├── success-metrics.md
-├── pilot-plan.md
-├── production-plan.md
-└── roi.md
+- [x] Qwen3.5-2B GGUF
+- [x] llama.cpp CPU inference
+- [x] FastAPI
+- [x] Structured output
+- [x] Validation
+- [x] Health/readiness
+- [x] Logging
+- [x] Initial tests
 
+### Phase 2 — Tool Calling 🚧
 
-Example:
+- [ ] Tool abstraction
+- [ ] Safe tool execution
+- [ ] Kubernetes diagnostic tools
+- [ ] Git repository tools
+- [ ] Prometheus query tools
+- [ ] Human approval for risky actions
 
-Customer problem
+### Phase 3 — Enterprise RAG
 
-DevOps engineers spend 30–45 minutes diagnosing Kubernetes incidents.
+- [ ] Document ingestion
+- [ ] Chunking
+- [ ] Embeddings
+- [ ] PostgreSQL + pgvector
+- [ ] Hybrid retrieval
+- [ ] Reranking
+- [ ] Citations
+- [ ] RBAC
 
-Proposed solution
+### Phase 4 — Agentic AI
 
-AI DevOps Assistant automatically correlates Kubernetes logs, events, Helm configuration, Git changes and Prometheus metrics.
+- [ ] LangGraph
+- [ ] Stateful agents
+- [ ] Memory
+- [ ] Tool orchestration
+- [ ] Agentic RAG
+- [ ] Failure recovery
 
-Success metrics
-MTTR
-45 min → 15 min
+### Phase 5 — MCP
 
-Investigation time
-30 min → 5 min
+- [ ] MCP server architecture
+- [ ] Kubernetes MCP integration
+- [ ] Git/MCP integration
+- [ ] Observability integrations
 
-Automated RCA
-65% → 90%
+### Phase 6 — AI DevOps Investigation
 
-Human approval
-Required for risky actions
+```text
+User
+ ↓
+AI DevOps Agent
+ ↓
+Kubernetes + Git + Prometheus
+ ↓
+Evidence Correlation
+ ↓
+Root Cause Analysis
+ ↓
+Fix Plan
+ ↓
+Human Approval
+ ↓
+Safe Remediation
+```
 
-That's FDE thinking.
+### Phase 7 — Evaluation & Observability
 
-Portfolio
+- [ ] RAG evaluation
+- [ ] Agent evaluation
+- [ ] Hallucination checks
+- [ ] LLM tracing
+- [ ] Latency metrics
+- [ ] Token/compute metrics
+- [ ] Quality dashboards
 
+### Phase 8 — Production
 
-├── llm-engineering-lab
-│
-├── enterprise-rag-platform
-│
-├── agentic-knowledge-assistant
-│
-├── ai-devops-assistant
-│
-├── ai-evaluation-platform
-│
-└── fde-ai-devops-case-study
+- [ ] Docker
+- [ ] Kubernetes
+- [ ] Helm
+- [ ] Argo CD
+- [ ] Security controls
+- [ ] FDE case study
 
-AI ENGINEER / GENAI / FDE
-──────────────────────────
+## 🎯 Portfolio Goal
 
-Building production AI systems at the intersection
-of LLMs, RAG, Agents and Cloud/DevOps.
+The final system will demonstrate practical engineering across:
 
-⭐ Enterprise RAG Platform
-⭐ AI DevOps Assistant
-⭐ Agentic AI + MCP
-⭐ AI Evaluation & Observability
+**Local LLM → Structured Generation → Tool Calling → RAG → Agents → MCP → Kubernetes → Observability → Evaluation → Production AI**
 
-Tech:
-Python • FastAPI • LangGraph • MCP
-PostgreSQL • pgvector • Qdrant
-Kubernetes • Helm • Argo CD
-Prometheus • Grafana • Docker
+## License
 
-1: Local Qwen + llama.cpp + structured generation
-2: Embeddings + pgvector + basic RAG
-3: Hybrid retrieval + reranking + citations
-4: Enterprise RAG + RBAC + multi-tenancy
-5: LangGraph agents + tools + memory
-6: Kubernetes + Prometheus + Git + MCP → AI DevOps Assistant
-7: Evaluation + tracing + metrics + safety
-8: Docker + Kubernetes + GitOps + FDE case study
+MIT
