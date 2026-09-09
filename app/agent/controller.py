@@ -11,46 +11,17 @@ class DevOpsAgent:
     """
     Controlled Agentic AI loop for Kubernetes investigation.
 
-    Architecture:
-
-        User
-          ↓
-        Qwen
-          ↓
-        Tool decision
-          ↓
-        Tool Registry
-          ↓
-        Read-only DevOps tool
-          ↓
-        Tool result
-          ↓
-        Qwen
-          ↓
-        Final RCA
-
-    The model can request tools, but it cannot execute arbitrary
-    Python, shell commands, or kubectl commands.
+    The model selects only read-only tools registered in ToolRegistry.
+    Collected tool results are preserved and are always synthesized into
+    a final RCA, including when the agent reaches max_iterations.
     """
 
-    def __init__(
-        self,
-        llm: Any,
-        max_iterations: int = 5,
-    ) -> None:
+    def __init__(self, llm: Any, max_iterations: int = 5) -> None:
         self.llm = llm
         self.registry = create_tool_registry()
         self.max_iterations = max_iterations
 
-    # ------------------------------------------------------------------
-    # Tool definitions
-    # ------------------------------------------------------------------
-
     def _tool_definitions(self) -> list[dict[str, Any]]:
-        """
-        Convert registered tools into a model-friendly format.
-        """
-
         return [
             {
                 "name": tool.name,
@@ -61,221 +32,92 @@ class DevOpsAgent:
         ]
 
     def _tool_names(self) -> set[str]:
-        """
-        Return the names of tools the agent is allowed to execute.
-        """
-
-        return {
-            tool.name
-            for tool in self.registry.definitions()
-        }
-
-    # ------------------------------------------------------------------
-    # JSON parsing
-    # ------------------------------------------------------------------
+        return {tool.name for tool in self.registry.definitions()}
 
     def _extract_json(self, text: str) -> dict[str, Any]:
-        """
-        Extract the first JSON object from the model response.
-
-        Small local models sometimes return Markdown fences or
-        additional explanatory text, so we intentionally make
-        parsing tolerant.
-        """
-
         if not text:
-            raise ValueError(
-                "Agent returned an empty response."
-            )
+            raise ValueError("Agent returned an empty response.")
 
         text = text.strip()
 
-        # Remove Markdown code fences.
-
         if text.startswith("```"):
-            lines = text.splitlines()
-
-            if lines:
-                lines = lines[1:]
-
+            lines = text.splitlines()[1:]
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
-
             text = "\n".join(lines).strip()
-
             if text.lower().startswith("json"):
                 text = text[4:].strip()
 
-        # Locate JSON object.
-
         start = text.find("{")
         end = text.rfind("}")
-
         if start == -1 or end == -1 or end <= start:
-            raise ValueError(
-                f"Agent returned invalid JSON: {text}"
-            )
-
-        json_text = text[start:end + 1]
+            raise ValueError(f"Agent returned invalid JSON: {text}")
 
         try:
-            result = json.loads(json_text)
-
+            result = json.loads(text[start:end + 1])
         except json.JSONDecodeError as exc:
-            logger.error(
-                "Invalid JSON from Qwen: %s",
-                json_text,
-            )
-
-            raise ValueError(
-                f"Agent returned malformed JSON: {json_text}"
-            ) from exc
+            logger.error("Invalid JSON from Qwen: %s", text)
+            raise ValueError("Agent returned malformed JSON.") from exc
 
         if not isinstance(result, dict):
-            raise ValueError(
-                "Agent JSON response must be an object."
-            )
+            raise ValueError("Agent JSON response must be an object.")
 
         return result
 
-    # ------------------------------------------------------------------
-    # Prompt
-    # ------------------------------------------------------------------
-
     def _system_prompt(self) -> str:
-        """
-        System prompt optimized for a small local model.
-        """
-
-        tools = json.dumps(
-            self._tool_definitions(),
-            indent=2,
-        )
-
+        tools = json.dumps(self._tool_definitions(), indent=2)
         return f"""
 You are an AI DevOps investigation agent.
 
-Your job is to investigate Kubernetes incidents using
-read-only diagnostic tools.
+Investigate Kubernetes incidents using ONLY read-only diagnostic tools.
 
 AVAILABLE TOOLS:
-
 {tools}
 
-IMPORTANT RULES:
-
-1. Use ONLY the tools listed above.
+RULES:
+1. Use only the available tools.
 2. Never invent tool results.
-3. Never execute shell commands.
-4. Never execute kubectl commands directly.
-5. Never delete resources.
-6. Never restart resources.
-7. Never scale resources.
-8. Never modify Kubernetes resources.
-9. Use evidence collected from tools.
-10. If more evidence is needed, request another tool.
-11. When enough evidence is available, return the final RCA.
-12. Return ONLY valid JSON.
-13. Do not return Markdown.
-14. Do not explain your JSON outside the JSON object.
+3. Never execute shell or kubectl commands.
+4. Never modify, restart, delete, or scale resources.
+5. Use collected evidence when deciding what to investigate next.
+6. Correlate Kubernetes state, logs, events, and service metrics.
+7. Distinguish observations from inferences and hypotheses.
+8. When evidence is sufficient, return action=final.
+9. If you cannot finish before the iteration limit, the system will
+   synthesize the collected evidence separately.
+10. Return ONLY valid JSON.
 
-TOOL REQUEST FORMAT:
-
+TOOL FORMAT:
 {{
   "action": "get_pod_status",
-  "arguments": {{
-    "namespace": "production"
-  }}
+  "arguments": {{"namespace": "production"}}
 }}
 
-Another example:
-
-{{
-  "action": "get_pod_logs",
-  "arguments": {{
-    "pod_name": "payment-service-123",
-    "namespace": "production",
-    "tail_lines": 100
-  }}
-}}
-
-FINAL RESPONSE FORMAT:
-
+FINAL FORMAT:
 {{
   "action": "final",
   "summary": "Short incident summary",
   "root_cause": "Evidence-supported root cause",
-  "evidence": [
-    "Evidence 1",
-    "Evidence 2"
-  ],
-  "recommended_actions": [
-    "Recommended action 1",
-    "Recommended action 2"
-  ],
+  "evidence": ["Evidence 1", "Evidence 2"],
+  "recommended_actions": ["Action 1", "Action 2"],
   "confidence": 0.90
 }}
 
-IMPORTANT:
-
-The "action" field must contain either:
-
-1. The exact name of one available tool
-
-OR
-
-2. "final"
-
-Never use:
-
-"action": "tool"
-
-Always use the actual tool name.
+The action field must be an exact tool name or "final".
 """
 
-    # ------------------------------------------------------------------
-    # Tool execution
-    # ------------------------------------------------------------------
-
-    def _execute_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Execute a tool through the controlled registry.
-
-        The registry is the security boundary.
-        """
-
-        allowed_tools = self._tool_names()
-
-        if tool_name not in allowed_tools:
-            logger.warning(
-                "Blocked unauthorized tool request: %s",
-                tool_name,
-            )
-
+    def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if tool_name not in self._tool_names():
+            logger.warning("Blocked unauthorized tool request: %s", tool_name)
             return {
                 "tool_name": tool_name,
                 "success": False,
                 "data": None,
-                "error": (
-                    f"Tool '{tool_name}' is not allowed."
-                ),
+                "error": f"Tool '{tool_name}' is not allowed.",
             }
 
-        logger.info(
-            "Executing tool=%s arguments=%s",
-            tool_name,
-            arguments,
-        )
-
-        result = self.registry.execute(
-            tool_name,
-            arguments,
-        )
-
+        logger.info("Executing tool=%s arguments=%s", tool_name, arguments)
+        result = self.registry.execute(tool_name, arguments)
         return {
             "tool_name": result.tool_name,
             "success": result.success,
@@ -283,52 +125,130 @@ Always use the actual tool name.
             "error": result.error,
         }
 
-    # ------------------------------------------------------------------
-    # Investigation
-    # ------------------------------------------------------------------
-
-    def investigate(
+    def _synthesize_final_analysis(
         self,
         service: str,
         namespace: str,
         question: str,
+        evidence: list[dict[str, Any]],
+        tools_used: list[dict[str, Any]],
+        iterations: int,
     ) -> dict[str, Any]:
-        """
-        Run the Agentic DevOps investigation loop.
-        """
+        """Synthesize all collected evidence into the final RCA."""
 
+        evidence_text = json.dumps(evidence, indent=2, default=str)
+
+        prompt = f"""
+You are a senior Site Reliability Engineer performing a production incident investigation.
+
+Service: {service}
+Namespace: {namespace}
+Question: {question}
+
+TRUSTED DIAGNOSTIC EVIDENCE:
+{evidence_text}
+
+Produce the final incident RCA using ONLY this evidence.
+
+RULES:
+- Observation = directly returned by a diagnostic tool.
+- Inference = conclusion supported by multiple observations.
+- Hypothesis = plausible but unconfirmed explanation.
+- Identify the strongest supported root cause.
+- Do not treat high CPU or memory as root cause without supporting evidence.
+- Correlate Kubernetes state, logs, events, CPU, memory, error rate, request rate, and latency.
+- Never invent facts, logs, metrics, pods, events, or resources.
+- If evidence is insufficient, explicitly say so.
+
+Return ONLY valid JSON with this exact structure:
+{{
+  "summary": "short incident summary",
+  "root_cause": "strongest supported root cause",
+  "impact": "service/customer impact",
+  "evidence": [
+    {{
+      "type": "observation",
+      "source": "tool name",
+      "detail": "fact supported by tool output"
+    }}
+  ],
+  "contributing_factors": [],
+  "hypotheses": [],
+  "recommended_actions": [],
+  "confidence": 0.0
+}}
+"""
+
+        response = self.llm.generate(prompt)
+        return self._parse_final_analysis(
+            response=response,
+            tools_used=tools_used,
+            iterations=iterations,
+        )
+
+    def _parse_final_analysis(
+        self,
+        response: str,
+        tools_used: list[dict[str, Any]],
+        iterations: int,
+    ) -> dict[str, Any]:
+        try:
+            analysis = self._extract_json(response)
+        except ValueError:
+            logger.exception("Failed to parse final RCA response")
+            return {
+                "summary": "Diagnostic evidence was collected, but the final RCA could not be parsed.",
+                "root_cause": "Unable to parse the final RCA response.",
+                "impact": "Unknown.",
+                "evidence": [],
+                "contributing_factors": [],
+                "hypotheses": [],
+                "recommended_actions": [
+                    "Review the collected diagnostic evidence.",
+                    "Retry the investigation.",
+                ],
+                "confidence": 0.0,
+                "tools_used": tools_used,
+                "iterations": iterations,
+            }
+
+        analysis.setdefault("summary", "Incident investigation completed.")
+        analysis.setdefault("root_cause", "Insufficient evidence to determine root cause.")
+        analysis.setdefault("impact", "Unknown.")
+        analysis.setdefault("evidence", [])
+        analysis.setdefault("contributing_factors", [])
+        analysis.setdefault("hypotheses", [])
+        analysis.setdefault("recommended_actions", [])
+        analysis.setdefault("confidence", 0.0)
+        analysis["tools_used"] = tools_used
+        analysis["iterations"] = iterations
+        return analysis
+
+    def investigate(self, service: str, namespace: str, question: str) -> dict[str, Any]:
         conversation: list[dict[str, str]] = [
-            {
-                "role": "system",
-                "content": self._system_prompt(),
-            },
+            {"role": "system", "content": self._system_prompt()},
             {
                 "role": "user",
                 "content": (
-                    f"Investigate this Kubernetes incident.\n\n"
+                    "Investigate this Kubernetes incident.\n\n"
                     f"Service: {service}\n"
                     f"Namespace: {namespace}\n"
                     f"Question: {question}\n\n"
-                    f"Start the investigation by selecting "
-                    f"the most useful read-only tool."
+                    "Start with the most useful read-only diagnostic tool."
                 ),
             },
         ]
 
         executed_tools: list[dict[str, Any]] = []
+        collected_evidence: list[dict[str, Any]] = []
 
         for iteration in range(1, self.max_iterations + 1):
-
             logger.info(
                 "Agent iteration=%s service=%s namespace=%s",
                 iteration,
                 service,
                 namespace,
             )
-
-            # ----------------------------------------------------------
-            # Ask Qwen
-            # ----------------------------------------------------------
 
             response = self.llm.create_chat_completion(
                 messages=conversation,
@@ -338,262 +258,80 @@ Always use the actual tool name.
 
             try:
                 content = response["choices"][0]["message"]["content"]
-
             except (KeyError, IndexError, TypeError) as exc:
-                raise RuntimeError(
-                    "Unexpected response format from Qwen."
-                ) from exc
-
-            logger.debug(
-                "Qwen response: %s",
-                content,
-            )
-
-            # ----------------------------------------------------------
-            # Parse decision
-            # ----------------------------------------------------------
+                raise RuntimeError("Unexpected response format from Qwen.") from exc
 
             decision = self._extract_json(content)
-
             action = decision.get("action")
 
             if not action:
-                raise ValueError(
-                    "Agent response does not contain an 'action' field."
-                )
-
-            # ----------------------------------------------------------
-            # FINAL
-            # ----------------------------------------------------------
+                raise ValueError("Agent response does not contain an 'action' field.")
 
             if action == "final":
-
-                result = {
-                    "summary": decision.get(
-                        "summary",
-                        "Investigation completed.",
-                    ),
-                    "root_cause": decision.get(
-                        "root_cause",
-                        "Insufficient evidence.",
-                    ),
-                    "evidence": decision.get(
-                        "evidence",
-                        [],
-                    ),
-                    "recommended_actions": decision.get(
-                        "recommended_actions",
-                        [],
-                    ),
-                    "confidence": decision.get(
-                        "confidence",
-                        0.0,
-                    ),
-                    "tools_used": executed_tools,
-                    "iterations": iteration,
-                }
-
-                logger.info(
-                    "Agent investigation completed | "
-                    "service=%s | tools=%s | iterations=%s",
-                    service,
-                    len(executed_tools),
-                    iteration,
+                return self._parse_final_analysis(
+                    response=json.dumps(decision),
+                    tools_used=executed_tools,
+                    iterations=iteration,
                 )
-
-                return result
-
-            # ----------------------------------------------------------
-            # TOOL REQUEST
-            # ----------------------------------------------------------
 
             allowed_tools = self._tool_names()
-
-            # Preferred format:
-            #
-            # {
-            #   "action": "get_pod_status",
-            #   "arguments": {}
-            # }
-
-            if action in allowed_tools:
-
-                tool_name = action
-
-                arguments = decision.get(
-                    "arguments",
-                    {},
-                )
-
-                if not isinstance(arguments, dict):
-                    arguments = {}
-
-                tool_result = self._execute_tool(
-                    tool_name,
-                    arguments,
-                )
-
-                executed_tools.append(
-                    {
-                        "tool_name": tool_name,
-                        "arguments": arguments,
-                        "success": tool_result["success"],
-                    }
-                )
-
-                conversation.append(
-                    {
-                        "role": "assistant",
-                        "content": content,
-                    }
-                )
-
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "TOOL RESULT:\n"
-                            + json.dumps(
-                                tool_result,
-                                indent=2,
-                            )
-                            + "\n\n"
-                            "Use this evidence to continue "
-                            "the investigation."
-                        ),
-                    }
-                )
-
-                continue
-
-            # ----------------------------------------------------------
-            # BACKWARD-COMPATIBLE FORMAT
-            # ----------------------------------------------------------
-            #
-            # Some model responses may still produce:
-            #
-            # {
-            #   "action": "tool",
-            #   "tool_name": "get_pod_status",
-            #   "arguments": {}
-            # }
-            #
+            tool_name = action
 
             if action == "tool":
+                tool_name = decision.get("tool_name")
 
-                tool_name = decision.get(
-                    "tool_name"
-                )
+            if not tool_name:
+                raise ValueError("Tool action did not specify a tool name.")
 
-                arguments = decision.get(
-                    "arguments",
-                    {},
-                )
-
-                if not tool_name:
-                    raise ValueError(
-                        "Tool action did not specify tool_name."
-                    )
-
-                if not isinstance(arguments, dict):
-                    arguments = {}
-
-                tool_result = self._execute_tool(
-                    tool_name,
-                    arguments,
-                )
-
-                executed_tools.append(
-                    {
-                        "tool_name": tool_name,
-                        "arguments": arguments,
-                        "success": tool_result["success"],
-                    }
-                )
-
-                conversation.append(
-                    {
-                        "role": "assistant",
-                        "content": content,
-                    }
-                )
-
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "TOOL RESULT:\n"
-                            + json.dumps(
-                                tool_result,
-                                indent=2,
-                            )
-                            + "\n\n"
-                            "Use this evidence to continue "
-                            "the investigation."
-                        ),
-                    }
-                )
-
-                continue
-
-            # ----------------------------------------------------------
-            # UNKNOWN ACTION
-            # ----------------------------------------------------------
-
-            logger.error(
-                "Unknown agent action: %s",
-                action,
-            )
-
-            conversation.append(
-                {
-                    "role": "assistant",
-                    "content": content,
-                }
-            )
-
-            conversation.append(
-                {
+            if tool_name not in allowed_tools:
+                logger.warning("Unknown agent action: %s", tool_name)
+                conversation.append({"role": "assistant", "content": content})
+                conversation.append({
                     "role": "user",
                     "content": (
-                        "Your previous response contained an "
-                        "invalid action.\n\n"
-                        f"Invalid action: {action}\n\n"
-                        "Choose ONLY one of these actions:\n"
-                        f"{sorted(allowed_tools)}\n"
-                        "or:\n"
-                        "final\n\n"
-                        "Return ONLY valid JSON."
+                        "Invalid action. Choose only one of these exact tool names "
+                        f"or final: {sorted(allowed_tools)}"
                     ),
-                }
-            )
+                })
+                continue
 
-        # --------------------------------------------------------------
-        # MAX ITERATIONS
-        # --------------------------------------------------------------
+            arguments = decision.get("arguments", {})
+            if not isinstance(arguments, dict):
+                arguments = {}
 
+            tool_result = self._execute_tool(tool_name, arguments)
+
+            executed_tools.append({
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "success": tool_result["success"],
+            })
+
+            collected_evidence.append(tool_result)
+
+            conversation.append({"role": "assistant", "content": content})
+            conversation.append({
+                "role": "user",
+                "content": (
+                    "TOOL RESULT:\n"
+                    + json.dumps(tool_result, indent=2, default=str)
+                    + "\n\n"
+                    "Use this evidence to continue the investigation. "
+                    "Select another useful tool or return action=final."
+                ),
+            })
+
+        # Critical fix: never discard evidence when max_iterations is reached.
         logger.warning(
-            "Agent reached max iterations | service=%s | "
-            "iterations=%s",
+            "Agent reached max iterations; synthesizing collected evidence | service=%s",
             service,
-            self.max_iterations,
         )
 
-        return {
-            "summary": (
-                "Investigation reached the maximum number "
-                "of agent iterations."
-            ),
-            "root_cause": (
-                "Insufficient evidence to determine the "
-                "root cause."
-            ),
-            "evidence": [],
-            "recommended_actions": [
-                "Review the collected Kubernetes diagnostics.",
-                "Run another investigation with additional context.",
-            ],
-            "confidence": 0.0,
-            "tools_used": executed_tools,
-            "iterations": self.max_iterations,
-        }
+        return self._synthesize_final_analysis(
+            service=service,
+            namespace=namespace,
+            question=question,
+            evidence=collected_evidence,
+            tools_used=executed_tools,
+            iterations=self.max_iterations,
+        )
