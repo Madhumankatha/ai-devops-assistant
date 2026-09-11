@@ -83,9 +83,11 @@ RULES:
 6. Correlate Kubernetes state, logs, events, and service metrics.
 7. Distinguish observations from inferences and hypotheses.
 8. When evidence is sufficient, return action=final.
-9. If you cannot finish before the iteration limit, the system will
+9. If the question asks for metrics/telemetry correlation, make sure
+   service metrics, error rate, and latency are collected before finalizing.
+10. If you cannot finish before the iteration limit, the system will
    synthesize the collected evidence separately.
-10. Return ONLY valid JSON.
+11. Return ONLY valid JSON.
 
 TOOL FORMAT:
 {{
@@ -124,6 +126,58 @@ The action field must be an exact tool name or "final".
             "data": result.data,
             "error": result.error,
         }
+
+    def _should_collect_telemetry(self, question: str) -> bool:
+        """Return True when the incident request explicitly needs telemetry correlation."""
+        normalized = question.lower()
+        telemetry_terms = (
+            "metric",
+            "metrics",
+            "telemetry",
+            "error rate",
+            "latency",
+            "cpu",
+            "memory",
+            "prometheus",
+            "correlate",
+            "correlation",
+        )
+        return any(term in normalized for term in telemetry_terms)
+
+    def _collect_required_telemetry(
+        self,
+        service: str,
+        namespace: str,
+        executed_tools: list[dict[str, Any]],
+        collected_evidence: list[dict[str, Any]],
+    ) -> None:
+        """Ensure telemetry coverage for questions that explicitly request correlation."""
+        required = (
+            ("get_service_metrics", {"service": service, "namespace": namespace}),
+            ("get_error_rate", {"service": service, "namespace": namespace}),
+            ("get_latency", {"service": service, "namespace": namespace}),
+        )
+
+        already_executed = {item["tool_name"] for item in executed_tools}
+
+        for tool_name, arguments in required:
+            if tool_name in already_executed:
+                continue
+
+            logger.info(
+                "Collecting required telemetry tool=%s service=%s namespace=%s",
+                tool_name,
+                service,
+                namespace,
+            )
+            tool_result = self._execute_tool(tool_name, arguments)
+
+            executed_tools.append({
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "success": tool_result["success"],
+            })
+            collected_evidence.append(tool_result)
 
     def _synthesize_final_analysis(
         self,
@@ -241,6 +295,7 @@ Return ONLY valid JSON with this exact structure:
 
         executed_tools: list[dict[str, Any]] = []
         collected_evidence: list[dict[str, Any]] = []
+        telemetry_required = self._should_collect_telemetry(question)
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info(
@@ -268,6 +323,22 @@ Return ONLY valid JSON with this exact structure:
                 raise ValueError("Agent response does not contain an 'action' field.")
 
             if action == "final":
+                if telemetry_required:
+                    self._collect_required_telemetry(
+                        service=service,
+                        namespace=namespace,
+                        executed_tools=executed_tools,
+                        collected_evidence=collected_evidence,
+                    )
+                    return self._synthesize_final_analysis(
+                        service=service,
+                        namespace=namespace,
+                        question=question,
+                        evidence=collected_evidence,
+                        tools_used=executed_tools,
+                        iterations=iteration,
+                    )
+
                 return self._parse_final_analysis(
                     response=json.dumps(decision),
                     tools_used=executed_tools,
@@ -326,6 +397,14 @@ Return ONLY valid JSON with this exact structure:
             "Agent reached max iterations; synthesizing collected evidence | service=%s",
             service,
         )
+
+        if telemetry_required:
+            self._collect_required_telemetry(
+                service=service,
+                namespace=namespace,
+                executed_tools=executed_tools,
+                collected_evidence=collected_evidence,
+            )
 
         return self._synthesize_final_analysis(
             service=service,
