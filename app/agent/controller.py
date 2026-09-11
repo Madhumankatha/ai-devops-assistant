@@ -146,6 +146,21 @@ The action field must be an exact tool name or "final".'''
             return []
         return [item if isinstance(item, str) else str(item) for item in actions]
 
+    def _has_sufficient_evidence(self, evidence: list[dict[str, Any]]) -> bool:
+        successful_tools = {
+            item.get("tool_name")
+            for item in evidence
+            if item.get("success")
+        }
+
+        required_core = {
+            "get_pod_status",
+            "get_pod_logs",
+            "get_kubernetes_events",
+        }
+
+        return required_core.issubset(successful_tools)
+
     def _retrieve_runbooks(self, service: str, question: str, evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
         evidence_text = json.dumps(evidence, default=str)
         query = f"{service} {question} {evidence_text}"
@@ -249,9 +264,33 @@ Use the runbooks as troubleshooting guidance, not as proof of facts. Produce the
             arguments = decision.get("arguments", {})
             if not isinstance(arguments, dict):
                 arguments = {}
+
             tool_result = self._execute_tool(tool_name, arguments)
             executed_tools.append({"tool_name": tool_name, "arguments": arguments, "success": tool_result["success"]})
             collected_evidence.append(tool_result)
+
+            if self._has_sufficient_evidence(collected_evidence):
+                logger.info(
+                    "Agent collected sufficient evidence; synthesizing RCA | service=%s iteration=%s",
+                    service,
+                    iteration,
+                )
+                if telemetry_required:
+                    self._collect_required_telemetry(
+                        service,
+                        namespace,
+                        executed_tools,
+                        collected_evidence,
+                    )
+                return self._synthesize_final_analysis(
+                    service=service,
+                    namespace=namespace,
+                    question=question,
+                    evidence=collected_evidence,
+                    tools_used=executed_tools,
+                    iterations=iteration,
+                )
+
             conversation.append({"role": "assistant", "content": content})
             conversation.append({"role": "user", "content": "TOOL RESULT:\n" + json.dumps(tool_result, indent=2, default=str) + "\n\nUse this evidence to continue the investigation. Select another useful tool or return action=final."})
 
