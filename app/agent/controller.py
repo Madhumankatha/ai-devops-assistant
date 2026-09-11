@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any
 
+from app.rag import RunbookRetriever
 from app.tools import create_tool_registry
 
 logger = logging.getLogger(__name__)
@@ -13,10 +14,14 @@ class DevOpsAgent:
     def __init__(self, llm: Any, max_iterations: int = 5) -> None:
         self.llm = llm
         self.registry = create_tool_registry()
+        self.retriever = RunbookRetriever()
         self.max_iterations = max_iterations
 
     def _tool_definitions(self) -> list[dict[str, Any]]:
-        return [{"name": t.name, "description": t.description, "parameters": t.parameters} for t in self.registry.definitions()]
+        return [
+            {"name": t.name, "description": t.description, "parameters": t.parameters}
+            for t in self.registry.definitions()
+        ]
 
     def _tool_names(self) -> set[str]:
         return {tool.name for tool in self.registry.definitions()}
@@ -38,7 +43,7 @@ class DevOpsAgent:
         if start == -1 or end <= start:
             raise ValueError(f"Agent returned invalid JSON: {text}")
         try:
-            result = json.loads(text[start:end + 1])
+            result = json.loads(text[start : end + 1])
         except json.JSONDecodeError as exc:
             logger.error("Invalid JSON from Qwen: %s", text)
             raise ValueError("Agent returned malformed JSON.") from exc
@@ -103,7 +108,10 @@ The action field must be an exact tool name or "final".'''
 
     def _generate_text(self, prompt: str) -> str:
         response = self.llm.create_chat_completion(
-            messages=[{"role": "system", "content": "Return only the requested JSON object."}, {"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "Return only the requested JSON object."},
+                {"role": "user", "content": prompt},
+            ],
             temperature=0.1,
             max_tokens=700,
         )
@@ -116,23 +124,21 @@ The action field must be an exact tool name or "final".'''
         return content
 
     def _normalize_evidence(self, evidence: Any) -> list[str]:
-        """Convert rich LLM evidence objects into the API schema's list[str]."""
         if not isinstance(evidence, list):
             return []
         normalized: list[str] = []
         for item in evidence:
             if isinstance(item, str):
                 normalized.append(item)
-                continue
-            if isinstance(item, dict):
+            elif isinstance(item, dict):
                 detail = item.get("detail") or item.get("description") or item.get("message")
                 source = item.get("source") or item.get("tool") or item.get("tool_name")
                 if detail is not None:
                     normalized.append(f"[{source}] {detail}" if source else str(detail))
                 else:
                     normalized.append(json.dumps(item, default=str))
-                continue
-            normalized.append(str(item))
+            else:
+                normalized.append(str(item))
         return normalized
 
     def _normalize_actions(self, actions: Any) -> list[str]:
@@ -140,8 +146,24 @@ The action field must be an exact tool name or "final".'''
             return []
         return [item if isinstance(item, str) else str(item) for item in actions]
 
+    def _retrieve_runbooks(self, service: str, question: str, evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        evidence_text = json.dumps(evidence, default=str)
+        query = f"{service} {question} {evidence_text}"
+        matches = self.retriever.search(query, top_k=3)
+        return [
+            {
+                "id": match.runbook_id,
+                "title": match.title,
+                "score": match.score,
+                "content": match.content,
+            }
+            for match in matches
+        ]
+
     def _synthesize_final_analysis(self, service: str, namespace: str, question: str, evidence: list[dict[str, Any]], tools_used: list[dict[str, Any]], iterations: int) -> dict[str, Any]:
         evidence_text = json.dumps(evidence, indent=2, default=str)
+        runbooks = self._retrieve_runbooks(service, question, evidence)
+        runbook_text = json.dumps(runbooks, indent=2, default=str)
         prompt = f'''You are a senior Site Reliability Engineer performing a production incident investigation.
 
 Service: {service}
@@ -151,18 +173,30 @@ Question: {question}
 TRUSTED DIAGNOSTIC EVIDENCE:
 {evidence_text}
 
-Produce the final incident RCA using ONLY this evidence. Correlate Kubernetes state, logs, events, CPU, memory, error rate, request rate, and latency. Never invent facts. Return ONLY valid JSON.
+RELEVANT LOCAL RUNBOOKS:
+{runbook_text}
 
-{{"summary":"short incident summary","root_cause":"strongest supported root cause","impact":"service/customer impact","evidence":[{{"type":"observation","source":"tool name","detail":"fact supported by tool output"}}],"contributing_factors":[],"hypotheses":[],"recommended_actions":[],"confidence":0.0}}'''
+Use the runbooks as troubleshooting guidance, not as proof of facts. Produce the final incident RCA using ONLY the diagnostic evidence for factual claims. Correlate Kubernetes state, logs, events, CPU, memory, error rate, request rate, and latency. Use relevant runbook guidance to improve recommended actions. Never invent facts. Return ONLY valid JSON.
+
+{{"summary":"short incident summary","root_cause":"strongest supported root cause","evidence":[{{"type":"observation","source":"tool name","detail":"fact supported by tool output"}}],"recommended_actions":["Action 1"],"confidence":0.0}}'''
         response = self._generate_text(prompt)
-        return self._parse_final_analysis(response, tools_used, iterations)
+        return self._parse_final_analysis(response, tools_used, iterations, runbooks)
 
-    def _parse_final_analysis(self, response: str, tools_used: list[dict[str, Any]], iterations: int) -> dict[str, Any]:
+    def _parse_final_analysis(self, response: str, tools_used: list[dict[str, Any]], iterations: int, runbooks: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         try:
             analysis = self._extract_json(response)
         except ValueError:
             logger.exception("Failed to parse final RCA response")
-            return {"summary": "Diagnostic evidence was collected, but the final RCA could not be parsed.", "root_cause": "Unable to parse the final RCA response.", "evidence": [], "recommended_actions": ["Review the collected diagnostic evidence.", "Retry the investigation."], "confidence": 0.0, "tools_used": tools_used, "iterations": iterations}
+            return {
+                "summary": "Diagnostic evidence was collected, but the final RCA could not be parsed.",
+                "root_cause": "Unable to parse the final RCA response.",
+                "evidence": [],
+                "recommended_actions": ["Review the collected diagnostic evidence.", "Retry the investigation."],
+                "confidence": 0.0,
+                "tools_used": tools_used,
+                "iterations": iterations,
+                "runbooks": runbooks or [],
+            }
         analysis["summary"] = str(analysis.get("summary", "Incident investigation completed."))
         analysis["root_cause"] = str(analysis.get("root_cause", "Insufficient evidence to determine root cause."))
         analysis["evidence"] = self._normalize_evidence(analysis.get("evidence", []))
@@ -174,6 +208,7 @@ Produce the final incident RCA using ONLY this evidence. Correlate Kubernetes st
         analysis["confidence"] = max(0.0, min(1.0, analysis["confidence"]))
         analysis["tools_used"] = tools_used
         analysis["iterations"] = iterations
+        analysis["runbooks"] = runbooks or []
         return analysis
 
     def investigate(self, service: str, namespace: str, question: str) -> dict[str, Any]:
@@ -201,7 +236,8 @@ Produce the final incident RCA using ONLY this evidence. Correlate Kubernetes st
                 if telemetry_required:
                     self._collect_required_telemetry(service, namespace, executed_tools, collected_evidence)
                     return self._synthesize_final_analysis(service, namespace, question, collected_evidence, executed_tools, iteration)
-                return self._parse_final_analysis(json.dumps(decision), executed_tools, iteration)
+                runbooks = self._retrieve_runbooks(service, question, collected_evidence)
+                return self._parse_final_analysis(json.dumps(decision), executed_tools, iteration, runbooks)
 
             tool_name = decision.get("tool_name") if action == "tool" else action
             if not tool_name:
