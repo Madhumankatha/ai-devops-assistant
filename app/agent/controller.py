@@ -35,6 +35,10 @@ class DevOpsAgent:
         return {tool.name for tool in self.registry.definitions()}
 
     def _extract_json(self, text: str) -> dict[str, Any]:
+        if not isinstance(text, str):
+            raise ValueError(
+                f"Agent returned an unexpected response type: {type(text).__name__}"
+            )
         if not text:
             raise ValueError("Agent returned an empty response.")
 
@@ -179,6 +183,38 @@ The action field must be an exact tool name or "final".
             })
             collected_evidence.append(tool_result)
 
+    def _generate_text(self, prompt: str) -> str:
+        """Generate plain text safely with llama.cpp.
+
+        llama-cpp-python's low-level ``generate()`` API returns a token
+        generator rather than a string. RCA synthesis needs complete text,
+        so use the chat-completion API and extract the final message content.
+        """
+        response = self.llm.create_chat_completion(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Return only the requested JSON object.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.1,
+            max_tokens=700,
+        )
+
+        try:
+            content = response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("Unexpected response format from Qwen during RCA synthesis.") from exc
+
+        if not isinstance(content, str):
+            raise RuntimeError(
+                "Qwen RCA synthesis returned non-text content: "
+                f"{type(content).__name__}"
+            )
+
+        return content
+
     def _synthesize_final_analysis(
         self,
         service: str,
@@ -233,7 +269,7 @@ Return ONLY valid JSON with this exact structure:
 }}
 """
 
-        response = self.llm.generate(prompt)
+        response = self._generate_text(prompt)
         return self._parse_final_analysis(
             response=response,
             tools_used=tools_used,
@@ -392,7 +428,6 @@ Return ONLY valid JSON with this exact structure:
                 ),
             })
 
-        # Critical fix: never discard evidence when max_iterations is reached.
         logger.warning(
             "Agent reached max iterations; synthesizing collected evidence | service=%s",
             service,
