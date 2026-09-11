@@ -45,9 +45,7 @@ class InvestigationResponse(BaseModel):
     root_cause: str
     evidence: list[str]
     recommended_actions: list[str]
-    confidence: float = Field(
-        ge=0.0,
-        le=1.0,
-    )
+    confidence: float = Field(ge=0.0, le=1.0)
     tools_used: list[dict]
     iterations: int
+    runbooks: list[dict] = Field(default_factory=list)
