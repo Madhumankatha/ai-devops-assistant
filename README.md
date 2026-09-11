@@ -281,26 +281,6 @@ The current suite passes with 13 tests. The remaining Starlette/AnyIO message is
 - [x] Evidence-backed RCA synthesis
 - [x] Automated tests
 
-### Next — Production Integration
-
-- [ ] Replace mock Kubernetes tools with Kubernetes API clients
-- [ ] Replace mock Prometheus tools with Prometheus queries
-- [ ] Add Git/CI-CD diagnostics
-- [ ] Add authentication/RBAC
-- [ ] Add approval workflow for any future write actions
-- [ ] Add observability/tracing
-- [ ] Containerize and deploy to Kubernetes
-
-### Future — Enterprise AI DevOps
-
-- [ ] PostgreSQL + pgvector RAG
-- [ ] Hybrid retrieval and reranking
-- [ ] Citations
-- [ ] MCP integrations
-- [ ] Agent evaluation and hallucination checks
-- [ ] LLM/agent tracing
-- [ ] Quality and latency dashboards
-- [ ] GitOps deployment with Helm and Argo CD
 
 ## 🎯 Portfolio Story
 
