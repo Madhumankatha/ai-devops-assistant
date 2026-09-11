@@ -9,3 +9,6 @@ __pycache__/
 
 # Local models
 models/*.gguf
+
+./app/__pycache__/
+
