@@ -1,102 +1,150 @@
 # 🤖 AI DevOps Assistant
 
-> A production-oriented, privacy-first AI DevOps assistant powered by a local **Qwen3.5-2B GGUF** model and **llama.cpp**.
+> A privacy-first, production-oriented AI DevOps investigation assistant powered by a local **Qwen GGUF** model and **llama.cpp**.
 
-The project is being built hands-on from local LLM inference to RAG, agentic workflows, MCP integrations, Kubernetes diagnostics, evaluation, observability, and production deployment.
+The current MVP combines a local LLM agent loop with safe read-only Kubernetes diagnostics, mock Prometheus telemetry, evidence correlation, and local runbook retrieval. It is designed to demonstrate practical **Agentic AI + DevOps + RAG** engineering without requiring a live Kubernetes cluster.
 
-## 🚧 Project Status
+## 🚀 Current Status
 
-**Current phase: Phase 1 — Local LLM Incident Analyzer**
+**Phase 1 + Agentic Investigation MVP — working**
 
-Implemented:
+Implemented and tested:
 
-- Local Qwen3.5-2B GGUF inference
-- CPU-only llama.cpp inference
+- Local Qwen GGUF inference through llama.cpp
 - FastAPI REST API
-- Structured incident-analysis output
+- Structured JSON incident analysis
 - Pydantic request/response validation
-- Evidence-focused root-cause prompting
-- Request IDs and HTTP timing headers
-- Health and readiness endpoints
-- Application logging
-- Docker container definition
-- Initial automated tests
+- Controlled agentic investigation loop
+- Tool registry with allow-listed tools
+- Read-only Kubernetes diagnostic tools using mock data
+- Mock Prometheus service metrics, error rate, and latency
+- Evidence accumulation and early-stop sufficiency checks
+- Evidence normalization for stable API responses
+- Local runbook retrieval and RCA guidance
+- RCA synthesis from collected evidence
+- Request IDs, HTTP timing, health/readiness endpoints, and logging
+- Automated test coverage
 
-## 🏗️ Current Architecture
+> **Important:** Kubernetes and Prometheus data are currently mock/demo data. A live Kubernetes cluster is not required for the current MVP.
+
+## 🧠 What the Agent Does
+
+Given a service, namespace, and incident question, the agent follows a controlled loop:
 
 ```text
-Client
-  │
-  ▼
-FastAPI
-  │
-  ▼
-Incident Analyzer
-  │
-  ▼
-llama.cpp
-  │
-  ▼
-Qwen3.5-2B GGUF
-  │
-  ▼
-Structured JSON
-  │
-  ▼
-Pydantic Validation
+User Incident
+     │
+     ▼
+ FastAPI API
+     │
+     ▼
+ DevOps Agent
+     │
+     ├──► Tool Registry
+     │      ├── Pod Status
+     │      ├── Pod Logs
+     │      ├── K8s Events
+     │      ├── Deployment Status
+     │      ├── Service Metrics
+     │      ├── Error Rate
+     │      └── P95 Latency
+     │
+     ▼
+ Evidence Collection
+     │
+     ├── Kubernetes state
+     ├── Logs
+     ├── Events
+     └── Telemetry
+     │
+     ▼
+ Evidence Sufficiency Check
+     │
+     ▼
+ Local Runbook Retrieval
+     │
+     ▼
+ LLM RCA Synthesis
+     │
+     ▼
+ Structured RCA JSON
 ```
 
-## 🧪 Example
+### Safety boundary
+
+The agent is intentionally restricted to diagnostic operations. It does **not** restart, delete, scale, modify, or otherwise mutate Kubernetes resources.
+
+## 🔍 Example Investigation
 
 ### Request
 
 ```json
 {
   "service": "payment-service",
-  "environment": "production",
-  "description": "Payment pods are repeatedly restarting",
-  "logs": "ERROR database connection timeout after 30 seconds\nERROR failed to connect to database"
+  "namespace": "production",
+  "question": "Why is payment-service failing and correlate the Kubernetes state with error rate and latency?"
 }
 ```
 
-### Response
+### Example RCA
 
 ```json
 {
-  "summary": "Payment service pods are experiencing repeated restarts due to database connection timeouts.",
-  "severity": "HIGH",
-  "root_cause": "Database connection failures are causing the application to restart.",
+  "summary": "The payment-service is experiencing critical failures with high error rate, high latency, and a crashing pod caused by database connection failure.",
+  "root_cause": "The payment-service pod cannot establish a database connection during startup, causing application startup failure and CrashLoopBackOff.",
   "evidence": [
-    "Database connection timeout is present in the logs",
-    "Database connection failure is present in the logs"
+    "[get_service_metrics] CPU utilization is 87.5% and memory utilization is 91.2%.",
+    "[get_pod_status] payment-service-7d9f8c6f7d-x2k9p is in CrashLoopBackOff with 12 restarts.",
+    "[get_pod_logs] Logs contain database connection timeout and failed-to-connect errors.",
+    "[get_kubernetes_events] Events show BackOff restarting failed container and readiness probe failure.",
+    "[get_error_rate] Error rate is 18.7%.",
+    "[get_latency] P95 latency is 1850ms."
   ],
   "recommended_actions": [
-    "Verify database availability",
-    "Check database connectivity from the workload",
-    "Review database connection configuration"
+    "Verify database availability and connectivity.",
+    "Validate database connection configuration and credentials.",
+    "Check network connectivity between the service and database.",
+    "Restart the deployment only after the underlying configuration or dependency issue is corrected."
   ],
-  "confidence": 0.90,
-  "processing_time_ms": 0.0
+  "confidence": 0.95
 }
 ```
+
+## 🛠️ Tooling
+
+The current registry exposes seven diagnostic tools:
+
+| Tool | Purpose |
+|---|---|
+| `get_pod_status` | Inspect pod health and restart state |
+| `get_pod_logs` | Inspect recent application logs |
+| `get_kubernetes_events` | Inspect Kubernetes events |
+| `get_deployment_status` | Inspect deployment readiness |
+| `get_service_metrics` | CPU, memory, request rate, error rate, latency |
+| `get_error_rate` | Service error rate |
+| `get_latency` | Service P95 latency |
+
+All tools are registered through a central `ToolRegistry`, giving the agent an explicit allow-list for execution.
 
 ## 📁 Project Structure
 
 ```text
 ai-devops-assistant/
 ├── app/
-│   ├── core/
-│   │   ├── config.py
-│   │   └── logging.py
-│   ├── schemas/
-│   │   └── incident.py
-│   ├── llm.py
-│   ├── main.py
-│   └── schemas.py
+│   ├── agent/
+│   │   └── controller.py       # Agent loop, evidence checks, RCA synthesis
+│   ├── core/                   # Configuration and logging
+│   ├── rag/                    # Local runbook retrieval
+│   ├── tools/
+│   │   ├── kubernetes.py       # Mock K8s diagnostics
+│   │   ├── prometheus.py       # Mock telemetry
+│   │   └── registry.py         # Tool registry
+│   ├── schemas/                # API/tool schemas
+│   └── main.py                 # FastAPI application
 ├── tests/
-│   ├── test_health.py
-│   └── test_schemas.py
-├── models/                 # local GGUF files; not committed
+├── models/                     # Local GGUF files; not committed
+├── .agents/                    # Agent workspace guidance
+├── .AGENTS.md                  # Repository-level AI engineering instructions
 ├── .env.example
 ├── .gitignore
 ├── Dockerfile
@@ -108,177 +156,159 @@ ai-devops-assistant/
 
 ### 1. Clone
 
-```bash
+```powershell
 git clone https://github.com/Madhumankatha/ai-devops-assistant.git
 cd ai-devops-assistant
+git checkout feature/agentic_ai
 ```
 
-### 2. Create a virtual environment
+### 2. Create environment
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-### 3. Install dependencies
-
-For Windows CPU-only development, install a compatible pre-built `llama-cpp-python` wheel when available for your Python version, then install the remaining requirements:
-
-```powershell
 python -m pip install -r requirements.txt
 ```
 
-> If pip attempts to compile `llama-cpp-python` and reports missing C/C++ build tools, use a compatible pre-built CPU wheel or install the required native build toolchain.
+For Windows CPU-only development, use a compatible pre-built `llama-cpp-python` wheel when available for your Python version. If pip tries to compile it, install the required native build tools or use a compatible wheel.
 
-### 4. Add the model
+### 3. Add local model
 
-Place your Qwen GGUF file under:
+Place the Qwen GGUF model under:
 
 ```text
 models/
 ```
 
-Configure `.env`:
+Configure `.env` using `.env.example`.
 
 ```text
-MODEL_PATH=./models/your-qwen3.5-2b-model.gguf
+MODEL_PATH=./models/your-qwen-model.gguf
 N_CTX=4096
 N_THREADS=8
 N_BATCH=256
 LOG_LEVEL=INFO
 ```
 
-The `.gguf` model is intentionally excluded from GitHub.
+Model weights and secrets are intentionally excluded from Git.
 
-### 5. Run
+### 4. Run
 
 ```powershell
 uvicorn app.main:app --reload
 ```
 
-Open Swagger UI:
+Swagger UI:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-Health:
-
-```text
-GET /health
-```
-
-Readiness:
-
-```text
-GET /ready
-```
-
-Incident analysis:
-
-```text
-POST /api/v1/analyze
-```
-
-### 6. Run tests
+### 5. Run tests
 
 ```powershell
 pytest -q
 ```
 
-## 🗺️ Roadmap
+Current baseline: **13 tests passing**.
 
-### Phase 1 — Local LLM ✅
+## 🎬 Demo Flow
 
-- [x] Qwen3.5-2B GGUF
-- [x] llama.cpp CPU inference
-- [x] FastAPI
-- [x] Structured output
-- [x] Validation
-- [x] Health/readiness
-- [x] Logging
-- [x] Initial tests
+A clean portfolio/demo walkthrough is:
 
-### Phase 2 — Tool Calling 🚧
+### Step 1 — Start the application
 
-- [ ] Tool abstraction
-- [ ] Safe tool execution
-- [ ] Kubernetes diagnostic tools
-- [ ] Git repository tools
-- [ ] Prometheus query tools
-- [ ] Human approval for risky actions
-
-### Phase 3 — Enterprise RAG
-
-- [ ] Document ingestion
-- [ ] Chunking
-- [ ] Embeddings
-- [ ] PostgreSQL + pgvector
-- [ ] Hybrid retrieval
-- [ ] Reranking
-- [ ] Citations
-- [ ] RBAC
-
-### Phase 4 — Agentic AI
-
-- [ ] LangGraph
-- [ ] Stateful agents
-- [ ] Memory
-- [ ] Tool orchestration
-- [ ] Agentic RAG
-- [ ] Failure recovery
-
-### Phase 5 — MCP
-
-- [ ] MCP server architecture
-- [ ] Kubernetes MCP integration
-- [ ] Git/MCP integration
-- [ ] Observability integrations
-
-### Phase 6 — AI DevOps Investigation
-
-```text
-User
- ↓
-AI DevOps Agent
- ↓
-Kubernetes + Git + Prometheus
- ↓
-Evidence Correlation
- ↓
-Root Cause Analysis
- ↓
-Fix Plan
- ↓
-Human Approval
- ↓
-Safe Remediation
+```powershell
+uvicorn app.main:app --reload
 ```
 
-### Phase 7 — Evaluation & Observability
+### Step 2 — Open Swagger
 
-- [ ] RAG evaluation
-- [ ] Agent evaluation
-- [ ] Hallucination checks
-- [ ] LLM tracing
-- [ ] Latency metrics
-- [ ] Token/compute metrics
-- [ ] Quality dashboards
+Open `/docs` and call the investigation endpoint.
 
-### Phase 8 — Production
+### Step 3 — Investigate a realistic incident
 
-- [ ] Docker
-- [ ] Kubernetes
-- [ ] Helm
-- [ ] Argo CD
-- [ ] Security controls
-- [ ] FDE case study
+Use:
 
-## 🎯 Portfolio Goal
+```text
+Service: payment-service
+Namespace: production
+Question: Why is payment-service failing? Correlate pod status, logs, Kubernetes events, error rate, and latency.
+```
 
-The final system will demonstrate practical engineering across:
+### Step 4 — Show the agent loop
 
-**Local LLM → Structured Generation → Tool Calling → RAG → Agents → MCP → Kubernetes → Observability → Evaluation → Production AI**
+The logs demonstrate the agent selecting tools, collecting evidence, checking evidence sufficiency, and synthesizing the RCA.
+
+### Step 5 — Show the RCA
+
+Highlight:
+
+- CrashLoopBackOff
+- Database connection timeout
+- Kubernetes BackOff/readiness events
+- 18.7% error rate
+- 1850ms P95 latency
+- Evidence-backed remediation steps
+
+### Step 6 — Explain the safety model
+
+The agent can diagnose, but it cannot perform destructive remediation. This creates a clear boundary between **AI investigation** and **human-approved operations**.
+
+## 🧪 Test / Quality Gate
+
+Before pushing changes:
+
+```powershell
+pytest -q
+```
+
+The current suite passes with 13 tests. The remaining Starlette/AnyIO message is a dependency deprecation warning and is not an application test failure.
+
+## 🗺️ Roadmap
+
+### Completed
+
+- [x] Local LLM inference
+- [x] FastAPI API
+- [x] Structured output
+- [x] Tool registry
+- [x] Read-only diagnostic tools
+- [x] Mock Kubernetes telemetry
+- [x] Agentic investigation loop
+- [x] Evidence sufficiency / early stopping
+- [x] Runbook retrieval
+- [x] Evidence-backed RCA synthesis
+- [x] Automated tests
+
+### Next — Production Integration
+
+- [ ] Replace mock Kubernetes tools with Kubernetes API clients
+- [ ] Replace mock Prometheus tools with Prometheus queries
+- [ ] Add Git/CI-CD diagnostics
+- [ ] Add authentication/RBAC
+- [ ] Add approval workflow for any future write actions
+- [ ] Add observability/tracing
+- [ ] Containerize and deploy to Kubernetes
+
+### Future — Enterprise AI DevOps
+
+- [ ] PostgreSQL + pgvector RAG
+- [ ] Hybrid retrieval and reranking
+- [ ] Citations
+- [ ] MCP integrations
+- [ ] Agent evaluation and hallucination checks
+- [ ] LLM/agent tracing
+- [ ] Quality and latency dashboards
+- [ ] GitOps deployment with Helm and Argo CD
+
+## 🎯 Portfolio Story
+
+This project demonstrates a practical progression:
+
+**Local LLM → Structured Generation → Tool Calling → Agentic Investigation → Evidence Correlation → RAG/Runbooks → Kubernetes/Prometheus → Evaluation → Production AI**
+
+The key engineering idea is simple: **the LLM proposes the investigation, tools provide the facts, and the final RCA is grounded in collected evidence.**
 
 ## License
 
