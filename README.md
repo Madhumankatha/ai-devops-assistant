@@ -203,52 +203,81 @@ pytest -q
 
 ## 🎬 Demo Flow
 
-1. Start the API with `uvicorn app.main:app --reload`.
-2. Open `http://127.0.0.1:8000/docs`.
-3. Call the investigation endpoint with:
-   ```text
-   Service: payment-service
-   Namespace: production
-   Question: Why is payment-service failing? Correlate pod status, logs, Kubernetes events, error rate, and latency.
-   ```
-4. Show the application logs to demonstrate tool selection, evidence collection, and the sufficiency check.
-5. Review the RCA response: CrashLoopBackOff, database timeout, Kubernetes events, error rate, P95 latency, and recommended investigation steps.
-6. Explain the safety boundary: the agent diagnoses and recommends; it does not execute remediation.
+A clean portfolio/demo walkthrough is:
 
-## ✅ Completion Checklist
+### Step 1 — Start the application
 
-- [x] Local LLM inference with Qwen GGUF and llama.cpp
-- [x] FastAPI API and structured response validation
-- [x] Controlled agentic investigation loop
-- [x] Seven registered read-only diagnostic tools
-- [x] Mock Kubernetes diagnostics
-- [x] Mock Prometheus telemetry
-- [x] Evidence collection and correlation
-- [x] Evidence sufficiency checks and early stopping
-- [x] Local runbook retrieval
-- [x] Evidence-grounded RCA synthesis
-- [x] API health/readiness and application logging
-- [x] Automated test suite (13 passing)
-- [x] README, architecture, demo flow, and agent instructions
+```powershell
+uvicorn app.main:app --reload
+```
 
-## 🔭 Possible Future Enhancements
+### Step 2 — Open Swagger
 
-The MVP is complete. The following are **optional extensions**, not unfinished requirements for the completed scope:
+Open `/docs` and call the investigation endpoint.
 
-- Integrate with a live Kubernetes API
-- Query a real Prometheus server
-- Add Git and CI/CD diagnostics
-- Add authentication and role-based access control
-- Add an approval workflow for future write operations
-- Expand RAG with PostgreSQL/pgvector, hybrid retrieval, and reranking
-- Add MCP integrations and agent evaluation
-- Add tracing, dashboards, and deployment automation
+### Step 3 — Investigate a realistic incident
 
-## 🎯 Key Engineering Idea
+Use:
 
-**The LLM proposes the investigation, diagnostic tools provide the facts, and the final RCA is grounded in collected evidence.**
+```text
+Service: payment-service
+Namespace: production
+Question: Why is payment-service failing? Correlate pod status, logs, Kubernetes events, error rate, and latency.
+```
 
-This project demonstrates a practical combination of **Local LLMs → Tool Calling → Agentic Investigation → Evidence Correlation → RAG/Runbooks → Structured RCA**.
+### Step 4 — Show the agent loop
+
+The logs demonstrate the agent selecting tools, collecting evidence, checking evidence sufficiency, and synthesizing the RCA.
+
+### Step 5 — Show the RCA
+
+Highlight:
+
+- CrashLoopBackOff
+- Database connection timeout
+- Kubernetes BackOff/readiness events
+- 18.7% error rate
+- 1850ms P95 latency
+- Evidence-backed remediation steps
+
+### Step 6 — Explain the safety model
+
+The agent can diagnose, but it cannot perform destructive remediation. This creates a clear boundary between **AI investigation** and **human-approved operations**.
+
+## 🧪 Test / Quality Gate
+
+Before pushing changes:
+
+```powershell
+pytest -q
+```
+
+The current suite passes with 13 tests. The remaining Starlette/AnyIO message is a dependency deprecation warning and is not an application test failure.
+
+## 🗺️ Roadmap
+
+### Completed
+
+- [x] Local LLM inference
+- [x] FastAPI API
+- [x] Structured output
+- [x] Tool registry
+- [x] Read-only diagnostic tools
+- [x] Mock Kubernetes telemetry
+- [x] Agentic investigation loop
+- [x] Evidence sufficiency / early stopping
+- [x] Runbook retrieval
+- [x] Evidence-backed RCA synthesis
+- [x] Automated tests
+
+
+## 🎯 Portfolio Story
+
+This project demonstrates a practical progression:
+
+**Local LLM → Structured Generation → Tool Calling → Agentic Investigation → Evidence Correlation → RAG/Runbooks → Kubernetes/Prometheus → Evaluation → Production AI**
+
+The key engineering idea is simple: **the LLM proposes the investigation, tools provide the facts, and the final RCA is grounded in collected evidence.**
 
 ## License
 
