@@ -1,35 +1,34 @@
 # 🤖 AI DevOps Assistant
 
-> A privacy-first, production-oriented AI DevOps investigation assistant powered by a local **Qwen GGUF** model and **llama.cpp**.
+> A completed, privacy-first Agentic AI DevOps investigation MVP powered by a local **Qwen GGUF** model and **llama.cpp**.
 
-The current MVP combines a local LLM agent loop with safe read-only Kubernetes diagnostics, mock Prometheus telemetry, evidence correlation, and local runbook retrieval. It is designed to demonstrate practical **Agentic AI + DevOps + RAG** engineering without requiring a live Kubernetes cluster.
+This project demonstrates an end-to-end incident investigation workflow using a local LLM, a controlled agent loop, read-only diagnostic tools, mock Kubernetes and Prometheus data, evidence correlation, local runbook retrieval, and structured root-cause analysis (RCA).
 
-## 🚀 Current Status
+## 🎉 Project Status
 
-**Phase 1 + Agentic Investigation MVP — working**
+<badge color="success">MVP Completed</badge>
 
-Implemented and tested:
+**The defined AI DevOps Assistant MVP is complete.** The implemented scope is documented below and validated by the automated test suite (**13 tests passing**).
 
-- Local Qwen GGUF inference through llama.cpp
-- FastAPI REST API
-- Structured JSON incident analysis
-- Pydantic request/response validation
+Completed capabilities:
+
+- Local Qwen GGUF inference through llama.cpp (CPU)
+- FastAPI REST API and Pydantic request/response validation
 - Controlled agentic investigation loop
-- Tool registry with allow-listed tools
-- Read-only Kubernetes diagnostic tools using mock data
+- Allow-listed tool registry with seven read-only diagnostic tools
+- Mock Kubernetes pod, deployment, log, and event diagnostics
 - Mock Prometheus service metrics, error rate, and latency
-- Evidence accumulation and early-stop sufficiency checks
-- Evidence normalization for stable API responses
+- Evidence accumulation, normalization, and sufficiency-based early stopping
 - Local runbook retrieval and RCA guidance
-- RCA synthesis from collected evidence
-- Request IDs, HTTP timing, health/readiness endpoints, and logging
-- Automated test coverage
+- Evidence-grounded RCA synthesis
+- Health/readiness endpoints, request IDs, timing headers, and logging
+- Automated tests
 
-> **Important:** Kubernetes and Prometheus data are currently mock/demo data. A live Kubernetes cluster is not required for the current MVP.
+> **Scope note:** Kubernetes and Prometheus integrations use mock/demo data. The completed project is a local, demonstrable MVP; it does not claim to connect to or operate a live Kubernetes cluster or Prometheus server.
 
 ## 🧠 What the Agent Does
 
-Given a service, namespace, and incident question, the agent follows a controlled loop:
+Given a service, namespace, and incident question, the agent follows a controlled investigation flow:
 
 ```text
 User Incident
@@ -52,11 +51,6 @@ User Incident
      ▼
  Evidence Collection
      │
-     ├── Kubernetes state
-     ├── Logs
-     ├── Events
-     └── Telemetry
-     │
      ▼
  Evidence Sufficiency Check
      │
@@ -72,7 +66,7 @@ User Incident
 
 ### Safety boundary
 
-The agent is intentionally restricted to diagnostic operations. It does **not** restart, delete, scale, modify, or otherwise mutate Kubernetes resources.
+The agent is restricted to diagnostic operations. It does **not** restart, delete, scale, modify, or otherwise mutate Kubernetes resources.
 
 ## 🔍 Example Investigation
 
@@ -90,11 +84,11 @@ The agent is intentionally restricted to diagnostic operations. It does **not** 
 
 ```json
 {
-  "summary": "The payment-service is experiencing critical failures with high error rate, high latency, and a crashing pod caused by database connection failure.",
+  "summary": "The payment-service is experiencing critical failures with high error rate, high latency, and a crashing pod associated with database connection failure.",
   "root_cause": "The payment-service pod cannot establish a database connection during startup, causing application startup failure and CrashLoopBackOff.",
   "evidence": [
     "[get_service_metrics] CPU utilization is 87.5% and memory utilization is 91.2%.",
-    "[get_pod_status] payment-service-7d9f8c6f7d-x2k9p is in CrashLoopBackOff with 12 restarts.",
+    "[get_pod_status] The payment-service pod is in CrashLoopBackOff with 12 restarts.",
     "[get_pod_logs] Logs contain database connection timeout and failed-to-connect errors.",
     "[get_kubernetes_events] Events show BackOff restarting failed container and readiness probe failure.",
     "[get_error_rate] Error rate is 18.7%.",
@@ -103,16 +97,15 @@ The agent is intentionally restricted to diagnostic operations. It does **not** 
   "recommended_actions": [
     "Verify database availability and connectivity.",
     "Validate database connection configuration and credentials.",
-    "Check network connectivity between the service and database.",
-    "Restart the deployment only after the underlying configuration or dependency issue is corrected."
+    "Check network connectivity between the service and database."
   ],
   "confidence": 0.95
 }
 ```
 
-## 🛠️ Tooling
+*The values above are illustrative mock incident data used for the project demo.*
 
-The current registry exposes seven diagnostic tools:
+## 🛠️ Diagnostic Tools
 
 | Tool | Purpose |
 |---|---|
@@ -120,11 +113,11 @@ The current registry exposes seven diagnostic tools:
 | `get_pod_logs` | Inspect recent application logs |
 | `get_kubernetes_events` | Inspect Kubernetes events |
 | `get_deployment_status` | Inspect deployment readiness |
-| `get_service_metrics` | CPU, memory, request rate, error rate, latency |
+| `get_service_metrics` | CPU, memory, request rate, error rate, and latency |
 | `get_error_rate` | Service error rate |
 | `get_latency` | Service P95 latency |
 
-All tools are registered through a central `ToolRegistry`, giving the agent an explicit allow-list for execution.
+All tools are registered through a central `ToolRegistry`, providing an explicit allow-list for agent execution.
 
 ## 📁 Project Structure
 
@@ -174,7 +167,7 @@ For Windows CPU-only development, use a compatible pre-built `llama-cpp-python` 
 
 ### 3. Add local model
 
-Place the Qwen GGUF model under:
+Place your Qwen GGUF model under:
 
 ```text
 models/
@@ -192,17 +185,13 @@ LOG_LEVEL=INFO
 
 Model weights and secrets are intentionally excluded from Git.
 
-### 4. Run
+### 4. Run the application
 
 ```powershell
 uvicorn app.main:app --reload
 ```
 
-Swagger UI:
-
-```text
-http://127.0.0.1:8000/docs
-```
+Swagger UI: `http://127.0.0.1:8000/docs`
 
 ### 5. Run tests
 
@@ -210,105 +199,56 @@ http://127.0.0.1:8000/docs
 pytest -q
 ```
 
-Current baseline: **13 tests passing**.
+**Verified test baseline:** 13 passed. A dependency deprecation warning from Starlette/AnyIO may be displayed; it does not indicate a failing test.
 
 ## 🎬 Demo Flow
 
-A clean portfolio/demo walkthrough is:
+1. Start the API with `uvicorn app.main:app --reload`.
+2. Open `http://127.0.0.1:8000/docs`.
+3. Call the investigation endpoint with:
+   ```text
+   Service: payment-service
+   Namespace: production
+   Question: Why is payment-service failing? Correlate pod status, logs, Kubernetes events, error rate, and latency.
+   ```
+4. Show the application logs to demonstrate tool selection, evidence collection, and the sufficiency check.
+5. Review the RCA response: CrashLoopBackOff, database timeout, Kubernetes events, error rate, P95 latency, and recommended investigation steps.
+6. Explain the safety boundary: the agent diagnoses and recommends; it does not execute remediation.
 
-### Step 1 — Start the application
+## ✅ Completion Checklist
 
-```powershell
-uvicorn app.main:app --reload
-```
+- [x] Local LLM inference with Qwen GGUF and llama.cpp
+- [x] FastAPI API and structured response validation
+- [x] Controlled agentic investigation loop
+- [x] Seven registered read-only diagnostic tools
+- [x] Mock Kubernetes diagnostics
+- [x] Mock Prometheus telemetry
+- [x] Evidence collection and correlation
+- [x] Evidence sufficiency checks and early stopping
+- [x] Local runbook retrieval
+- [x] Evidence-grounded RCA synthesis
+- [x] API health/readiness and application logging
+- [x] Automated test suite (13 passing)
+- [x] README, architecture, demo flow, and agent instructions
 
-### Step 2 — Open Swagger
+## 🔭 Possible Future Enhancements
 
-Open `/docs` and call the investigation endpoint.
+The MVP is complete. The following are **optional extensions**, not unfinished requirements for the completed scope:
 
-### Step 3 — Investigate a realistic incident
+- Integrate with a live Kubernetes API
+- Query a real Prometheus server
+- Add Git and CI/CD diagnostics
+- Add authentication and role-based access control
+- Add an approval workflow for future write operations
+- Expand RAG with PostgreSQL/pgvector, hybrid retrieval, and reranking
+- Add MCP integrations and agent evaluation
+- Add tracing, dashboards, and deployment automation
 
-Use:
+## 🎯 Key Engineering Idea
 
-```text
-Service: payment-service
-Namespace: production
-Question: Why is payment-service failing? Correlate pod status, logs, Kubernetes events, error rate, and latency.
-```
+**The LLM proposes the investigation, diagnostic tools provide the facts, and the final RCA is grounded in collected evidence.**
 
-### Step 4 — Show the agent loop
-
-The logs demonstrate the agent selecting tools, collecting evidence, checking evidence sufficiency, and synthesizing the RCA.
-
-### Step 5 — Show the RCA
-
-Highlight:
-
-- CrashLoopBackOff
-- Database connection timeout
-- Kubernetes BackOff/readiness events
-- 18.7% error rate
-- 1850ms P95 latency
-- Evidence-backed remediation steps
-
-### Step 6 — Explain the safety model
-
-The agent can diagnose, but it cannot perform destructive remediation. This creates a clear boundary between **AI investigation** and **human-approved operations**.
-
-## 🧪 Test / Quality Gate
-
-Before pushing changes:
-
-```powershell
-pytest -q
-```
-
-The current suite passes with 13 tests. The remaining Starlette/AnyIO message is a dependency deprecation warning and is not an application test failure.
-
-## 🗺️ Roadmap
-
-### Completed
-
-- [x] Local LLM inference
-- [x] FastAPI API
-- [x] Structured output
-- [x] Tool registry
-- [x] Read-only diagnostic tools
-- [x] Mock Kubernetes telemetry
-- [x] Agentic investigation loop
-- [x] Evidence sufficiency / early stopping
-- [x] Runbook retrieval
-- [x] Evidence-backed RCA synthesis
-- [x] Automated tests
-
-### Next — Production Integration
-
-- [ ] Replace mock Kubernetes tools with Kubernetes API clients
-- [ ] Replace mock Prometheus tools with Prometheus queries
-- [ ] Add Git/CI-CD diagnostics
-- [ ] Add authentication/RBAC
-- [ ] Add approval workflow for any future write actions
-- [ ] Add observability/tracing
-- [ ] Containerize and deploy to Kubernetes
-
-### Future — Enterprise AI DevOps
-
-- [ ] PostgreSQL + pgvector RAG
-- [ ] Hybrid retrieval and reranking
-- [ ] Citations
-- [ ] MCP integrations
-- [ ] Agent evaluation and hallucination checks
-- [ ] LLM/agent tracing
-- [ ] Quality and latency dashboards
-- [ ] GitOps deployment with Helm and Argo CD
-
-## 🎯 Portfolio Story
-
-This project demonstrates a practical progression:
-
-**Local LLM → Structured Generation → Tool Calling → Agentic Investigation → Evidence Correlation → RAG/Runbooks → Kubernetes/Prometheus → Evaluation → Production AI**
-
-The key engineering idea is simple: **the LLM proposes the investigation, tools provide the facts, and the final RCA is grounded in collected evidence.**
+This project demonstrates a practical combination of **Local LLMs → Tool Calling → Agentic Investigation → Evidence Correlation → RAG/Runbooks → Structured RCA**.
 
 ## License
 
